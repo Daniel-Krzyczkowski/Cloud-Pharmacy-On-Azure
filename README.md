@@ -24,3 +24,7 @@ Cloud Pharmacy is a fake medical company which used Microsoft Azure cloud servic
 
 ![physician-web-app-01.PNG](images/physician-web-app-01.PNG)
 ![physician-web-app-02.PNG](images/physician-web-app-02.PNG)
+
+# Patient's Verifiable Credential
+
+![vc-preview-01.jpg](images/vc-preview-01.jpg)  ![vc-preview-02.jpg](images/vc-preview-02.jpg)
