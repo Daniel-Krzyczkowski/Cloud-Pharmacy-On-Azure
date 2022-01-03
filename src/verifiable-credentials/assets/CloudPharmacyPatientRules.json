@@ -1,0 +1,21 @@
+{
+    "attestations": {
+      "idTokens": [
+        {
+          "id": "https://self-issued.me",
+          "mapping": {
+            "patientId": { "claim": "$.patientId" },
+            "patientName": { "claim": "$.patientName" }
+          },
+  
+          "configuration": "https://self-issued.me",
+          "client_id": "",
+          "redirect_uri": ""
+        }
+      ]
+    },
+    "validityInterval": 2592001,
+    "vc": {
+      "type": [ "CloudPharmacyPatient" ]
+    }
+  }

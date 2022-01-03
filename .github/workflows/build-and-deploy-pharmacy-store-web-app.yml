@@ -1,0 +1,43 @@
+name: Deploy Pharmacy Store Web App
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - src/web-apps/CloudPharmacy.PharmacyStore.WebApp/**
+
+  workflow_dispatch:
+
+env:
+  AZURE_WEBAPP_NAME: app-cloud-pharmacy-store-dev
+  AZURE_WEBAPP_PACKAGE_PATH: '.'
+
+jobs:
+  build-and-deploy-pharmacy-store-web-app:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      # Build app
+      - uses: actions/checkout@v2
+      - name: Setup .NET Core SDK
+        uses: actions/setup-dotnet@v1.7.2
+        with:
+          dotnet-version: '6.0.x'
+      - name: Install dependencies
+        run: dotnet restore ./src/web-apps/CloudPharmacy.PharmacyStore.WebApp/*.csproj
+      - name: Build
+        run: dotnet build ./src/web-apps/CloudPharmacy.PharmacyStore.WebApp/*.csproj --configuration Release --no-restore
+      - name: Publish
+        run: dotnet publish ./src/web-apps/CloudPharmacy.PharmacyStore.WebApp/*.csproj -c Release -o '${{ env.AZURE_WEBAPP_PACKAGE_PATH }}/pharmacy-store-web-app-packages'
+      - name: Test
+        run: dotnet test ./src/web-apps/CloudPharmacy.PharmacyStore.WebApp/*.csproj --no-restore --verbosity normal
+
+
+      # Deploy app
+      - name: Deploy Pharmacy Store Web App to Azure
+        uses: Azure/webapps-deploy@v2
+        with: 
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.PHARMACY_STORE_AZURE_WEB_APP_PUBLISH_PROFILE }}
+          package: '${{ env.AZURE_WEBAPP_PACKAGE_PATH }}/pharmacy-store-web-app-packages'

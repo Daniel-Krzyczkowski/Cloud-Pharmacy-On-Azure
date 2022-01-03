@@ -1,0 +1,161 @@
+﻿@page "/myschedule"
+@using CloudPharmacy.Physician.WebApp.Application.Model
+@using System.Collections.Generic
+@using Microsoft.Identity.Web
+@using System.Text.Json
+@inject NavigationManager NavManager
+@inject NotificationService NotificationService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject CloudPharmacy.Physician.WebApp.Infrastructure.API.IPhysicianAPI PhysicianAPI
+
+<AuthorizeView Context="Auth" Policy="Physician">
+    <Authorized>
+        <RadzenNotification />
+        <h2 style="margin-top: 40px">Add new slot for visit:</h2>
+        <RadzenDatePicker TValue="DateTime?" ShowTime="true" Change=@(args => OnChange(args, "DatePicker", "MM/dd/yyyy h:mm tt")) HourFormat="12" DateFormat="MM/dd/yyyy h:mm tt" />
+        <RadzenButton style="margin: 0 1rem 1rem 0; width: 200px" Icon="save" BusyText="Saving ..." IsBusy=@_isBusy Click=@(async () => await AddNewSlotAsync()) Text="Save" ButtonStyle="ButtonStyle.Secondary" />
+
+        <div class="container">
+            <h2 class="p-3 text-center">Declared free time slots:</h2>
+            <div class="col-md-12 d-flex align-items-end justify-content-center">
+                <div class="col-md-4 p-3">
+                    <RadzenCard Visible=@_isLoadingSlots>
+                        <RadzenProgressBar Visible=@_isLoadingSlots Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+                    </RadzenCard>
+                </div>
+            </div>
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var slot in freeSlots)
+                    {
+                        <tr>
+                            <td>@slot.SlotDateAndTime.ToString("yyyy-MM-dd")</td>
+                            <td>@slot.SlotDateAndTime.ToString("HH:mm")</td>
+                            <td>
+                                <RadzenButton style="margin: 0 1rem 1rem 0; width: 200px" Icon="save" BusyText="Saving ..." IsBusy=@_isBusy Text="Remove" ButtonStyle="ButtonStyle.Danger" />
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+    </Authorized>
+    <NotAuthorized>
+        <p>
+            <b>Please authenticate first.</b>
+        </p>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private bool _isBusy;
+    private bool _isLoadingSlots = true;
+    private PhysicianScheduleSlot _physicianScheduleSlot = new();
+    private IList<PhysicianScheduleSlot> freeSlots = new List<PhysicianScheduleSlot>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        await GetAllFreeSlotsAsync();
+    }
+
+    private void OnChange(DateTime? value, string name, string format)
+    {
+        if (value.HasValue)
+        {
+            _physicianScheduleSlot.SlotDateAndTime = value.Value;
+        }
+    }
+
+    private async Task AddNewSlotAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            if (_physicianScheduleSlot.SlotDateAndTime == default)
+            {
+                var error = new NotificationMessage
+                    {
+                        Severity = NotificationSeverity.Warning,
+                        Summary = "Please select date and time",
+                        Detail = "",
+                        Duration = 4000
+                    };
+                NotificationService.Notify(error);
+            }
+
+            else
+            {
+                _isBusy = true;
+                var response = await PhysicianAPI.AddNewScheduleSlotAsync(_physicianScheduleSlot);
+                _isBusy = false;
+
+                if (response.IsSuccessStatusCode)
+                {
+                    freeSlots.Add(new PhysicianScheduleSlot()
+                        {
+                            SlotDateAndTime = _physicianScheduleSlot.SlotDateAndTime
+                        });
+                    StateHasChanged();
+                    var confirmation = new NotificationMessage
+                        {
+                            Severity = NotificationSeverity.Success,
+                            Summary = "New slot successfully added",
+                            Detail = "",
+                            Duration = 4000
+                        };
+                    NotificationService.Notify(confirmation);
+                }
+            }
+        }
+    }
+
+    private async Task GetAllFreeSlotsAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            var physicianId = user.FindFirst(ClaimConstants.ObjectId).Value;
+            var response = await PhysicianAPI.GetFreeSlotsAsync(physicianId);
+            _isLoadingSlots = false;
+            var responseBodyAsString = await response.Content.ReadAsStringAsync();
+            var serializationOptions = new JsonSerializerOptions()
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                };
+            if (response.IsSuccessStatusCode)
+            {
+
+                freeSlots = JsonSerializer
+                                       .Deserialize<IList<PhysicianScheduleSlot>>(responseBodyAsString,
+                                                               serializationOptions);
+            }
+
+            else
+            {
+                var errorMessage = JsonSerializer.Deserialize<OperationError>(responseBodyAsString,
+                                                               serializationOptions);
+                var error = new NotificationMessage
+                    {
+                        Severity = NotificationSeverity.Error,
+                        Summary = "An error has occurred",
+                        Detail = errorMessage.Details,
+                        Duration = 4000
+                    };
+                NotificationService.Notify(error);
+            }
+        }
+    }
+}

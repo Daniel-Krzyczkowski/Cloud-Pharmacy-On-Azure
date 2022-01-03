@@ -1,0 +1,43 @@
+name: Deploy Patient Web App
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - src/web-apps/CloudPharmacy.Patient.WebApp/**
+
+  workflow_dispatch:
+
+env:
+  AZURE_WEBAPP_NAME: app-cloud-pharmacy-patient-dev
+  AZURE_WEBAPP_PACKAGE_PATH: '.'
+
+jobs:
+  build-and-deploy-patient-web-app:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      # Build app
+      - uses: actions/checkout@v2
+      - name: Setup .NET Core SDK
+        uses: actions/setup-dotnet@v1.7.2
+        with:
+          dotnet-version: '6.0.x'
+      - name: Install dependencies
+        run: dotnet restore ./src/web-apps/CloudPharmacy.Patient.WebApp/*.csproj
+      - name: Build
+        run: dotnet build ./src/web-apps/CloudPharmacy.Patient.WebApp/*.csproj --configuration Release --no-restore
+      - name: Publish
+        run: dotnet publish ./src/web-apps/CloudPharmacy.Patient.WebApp/*.csproj -c Release -o '${{ env.AZURE_WEBAPP_PACKAGE_PATH }}/patient-web-app-packages'
+      - name: Test
+        run: dotnet test ./src/web-apps/CloudPharmacy.Patient.WebApp/*.csproj --no-restore --verbosity normal
+
+
+      # Deploy app
+      - name: Deploy Patient Web App to Azure
+        uses: Azure/webapps-deploy@v2
+        with: 
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.PATIENT_AZURE_WEB_APP_PUBLISH_PROFILE }}
+          package: '${{ env.AZURE_WEBAPP_PACKAGE_PATH }}/patient-web-app-packages'

@@ -1,0 +1,41 @@
+name: Deploy Live Notifications Azure Function App
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - src/backend-apis/CloudPharmacy.LiveNotifications.FuncApp/**
+
+  workflow_dispatch:
+
+env:
+  AZURE_FUNCAPP_NAME: func-cloud-pharmacy-notifications-dev
+  AZURE_FUNCTIONAPP_PACKAGE_PATH: '.'
+
+jobs:
+  build-and-deploy-live-notifications-azure-function:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      # Build Azure Function App
+      - uses: actions/checkout@v2
+      - name: Build Function App
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: '6.0.x'
+      - name: Install dependencies
+        run: dotnet restore ./src/backend-apis/CloudPharmacy.LiveNotifications.FuncApp/*.csproj
+      - name: Build
+        run: dotnet build ./src/backend-apis/CloudPharmacy.LiveNotifications.FuncApp/*.csproj --configuration Release --no-restore --output ./func-app-packages
+      - name: Test
+        run: dotnet test ./src/backend-apis/CloudPharmacy.LiveNotifications.FuncApp/*.csproj --no-restore --verbosity normal
+
+
+      # Deploy Azure Function App
+      - name: Deploy Function App to Azure
+        uses: Azure/functions-action@v1
+        with: 
+          app-name: ${{ env.AZURE_FUNCAPP_NAME }}
+          publish-profile: ${{ secrets.LIVE_NOTIFICATIONS_AZURE_FUNCAPP_PUBLISH_PROFILE  }}
+          package: '${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/func-app-packages'

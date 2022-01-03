@@ -1,0 +1,172 @@
+﻿@page "/medicament-purchase"
+@using CloudPharmacy.PharmacyStore.WebApp.Application.Model
+@using System.Text.Json
+@using Microsoft.Identity.Web
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject CloudPharmacy.PharmacyStore.WebApp.Infrastructure.API.IPharmacyStoreAPI PharmacyStoreAPI
+@inject CloudPharmacy.PharmacyStore.WebApp.Infrastructure.Notifications.VerifiableCredentialsNotificationService VerifiableCredentialsNotificationService
+
+<PageTitle>Buy medicament</PageTitle>
+<RadzenDialog />
+<RadzenNotification />
+<AuthorizeView>
+    <Authorized>
+        <RadzenCard Style="margin-bottom: 20px;">
+            <div class="row">
+                <div class="col-md-6">
+                    <div>Name:</div>
+                    <b>@Medicament.Name</b>
+                    <div style="margin-top:20px">Producer:</div>
+                    <b>@Medicament.Producer</b>
+                    <div style="margin-top:20px">Price:</div>
+                    <b>@String.Format("{0:0.00}", @Medicament.Price) PLN</b>
+                </div>
+            </div>
+            <br />
+            <div class="row">
+                <h3>Scan your credential to obtain discount:</h3>
+                <div class="col-md-12 d-flex align-items-end justify-content-center">
+                    <div class="col-md-4 p-3">
+                        <RadzenCard Visible=@_isLoadingVerifiableCredentialQrCode>
+                            <RadzenProgressBar Visible=@_isLoadingVerifiableCredentialQrCode Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+                        </RadzenCard>
+                    </div>
+                </div>
+                <div class="col-md-12 d-flex align-items-end justify-content-center">
+                    <img src="@_patientCredentialVerificationResponse?.QrCode" width="200" />
+                </div>
+            </div>
+        </RadzenCard>
+        <div class="row">
+            <div class="col-md-12 d-flex align-items-end justify-content-center">
+                <RadzenButton Click="@(async (args) => await BuyAsync())" Text="Buy" Style="margin-bottom: 10px; margin-right:10px; width: 150px" />
+                <RadzenButton Click="@(async (args) => await CancelAsync())" ButtonStyle="ButtonStyle.Secondary" Text="Cancel" Style="margin-bottom: 10px; width: 150px" />
+            </div>
+        </div>
+
+    </Authorized>
+    <NotAuthorized>
+        <p>
+            <b>Please authenticate first.</b>
+        </p>
+    </NotAuthorized>
+</AuthorizeView>
+
+
+@code {
+    [Parameter]
+    public Medicament Medicament { get; set; }
+    private PatientCredentialVerificationResponse _patientCredentialVerificationResponse;
+    private bool _isLoadingVerifiableCredentialQrCode = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        await SubscribeToLiveEventsAsync();
+        await GenerateVerifiableCredentialQrCodeAsync();
+    }
+
+    private async Task SubscribeToLiveEventsAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            var userId = user.FindFirst(ClaimConstants.NameIdentifierId).Value;
+            await VerifiableCredentialsNotificationService.Initialize(userId);
+            await VerifiableCredentialsNotificationService.OpenConnectionAsync();
+            VerifiableCredentialsNotificationService.SubscribeHubMethod("vc-verification-status-update");
+            VerifiableCredentialsNotificationService.OnMessageReceived += LiveNotificationReceived;
+        }
+    }
+
+    private async Task UnSubscribeToLiveEventsAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            if (VerifiableCredentialsNotificationService.IsConnectionOpened)
+            {
+                await VerifiableCredentialsNotificationService.CloseConnectionAsync();
+            }
+        }
+    }
+
+    private async Task GenerateVerifiableCredentialQrCodeAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            var response = await PharmacyStoreAPI.VerifyPatientVerifiableCredentialAsync();
+            var serializationOptions = new JsonSerializerOptions()
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                };
+
+            var responseBodyAsString = await response.Content.ReadAsStringAsync();
+            if (response.IsSuccessStatusCode)
+            {
+                _patientCredentialVerificationResponse = JsonSerializer
+                                                            .Deserialize<PatientCredentialVerificationResponse>(responseBodyAsString, serializationOptions);
+                _isLoadingVerifiableCredentialQrCode = false;
+            }
+
+            else
+            {
+                var operationError = JsonSerializer.Deserialize<OperationError>(responseBodyAsString, serializationOptions);
+            }
+        }
+    }
+
+    private void LiveNotificationReceived(string message)
+    {
+        var serializationOptions = new JsonSerializerOptions()
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            };
+        var verificationStatusResponse = JsonSerializer
+                                              .Deserialize<VerificationStatusResponse>(message,
+                                                                                   serializationOptions);
+
+        if (verificationStatusResponse.Code == VerificationStatus.VerifiableCredentialSuccessfullyPresented)
+        {
+            var confirmation = new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Patient's verifiable credential successfully verified",
+                    Detail = "",
+                    Duration = 4000
+                };
+            NotificationService.Notify(confirmation);
+
+            var calculateDiscount = Medicament.Price * 0.1M;
+            Medicament.Price = Medicament.Price - calculateDiscount;
+            StateHasChanged();
+        }
+    }
+
+    private async Task BuyAsync()
+    {
+        await CloseAsync();
+        DialogService.Close(true);
+    }
+
+        private async Task CancelAsync()
+    {
+        await CloseAsync();
+        DialogService.Close(false);
+    }
+
+    private async Task CloseAsync()
+    {
+        VerifiableCredentialsNotificationService.OnMessageReceived -= LiveNotificationReceived;
+        await UnSubscribeToLiveEventsAsync();
+    }
+}

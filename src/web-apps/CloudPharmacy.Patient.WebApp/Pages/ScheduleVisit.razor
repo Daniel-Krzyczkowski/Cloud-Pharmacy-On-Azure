@@ -1,0 +1,81 @@
+﻿@page "/schedulevisit"
+@using CloudPharmacy.Patient.WebApp.Application.Model
+@using System.Text.Json
+@inject NavigationManager NavManager
+@inject CloudPharmacy.Patient.WebApp.Utils.PageParameterService<Physician> PageParameterService
+@inject CloudPharmacy.Patient.WebApp.Infrastructure.API.IPhysicianAPI PhysicianAPI
+
+<PageTitle>Schedule new visit</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+
+        <RadzenDataGrid AllowFiltering="true" AllowColumnResize="true" FilterMode="FilterMode.Advanced" PageSize="5" AllowPaging="true" AllowSorting="true"
+                        Data="@_physicians" TItem="Physician" ColumnWidth="140px" LogicalFilterOperator="LogicalFilterOperator.Or" IsLoading="@_isLoadingProfiles">
+            <Columns>
+                <RadzenDataGridColumn TItem="Physician" Title="Photo" Sortable="false" Filterable="false" Width="200px">
+                    <Template Context="data">
+                        <RadzenImage Path="@data.PhotoUrl" style="width: 100px; height: 100px; border-radius: 8px; aspect-ratio:initial" />
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="Physician" Property="FirstNameAndLastName" Title="Name" />
+                <RadzenDataGridColumn TItem="Physician" Property="Specialization" Title="Specialization" />
+                <RadzenDataGridColumn TItem="Physician" Property="" Title="">
+                    <Template Context="physician">
+                        <button class="btn btn-primary" @onclick="@(() => DisplayPhysicianSchedule(physician))">
+                            Choose term
+                        </button>
+                    </Template>
+                </RadzenDataGridColumn>
+            </Columns>
+        </RadzenDataGrid>
+
+    </Authorized>
+    <NotAuthorized>
+        <p>
+            <b>Please authenticate first.</b>
+        </p>
+    </NotAuthorized>
+</AuthorizeView>
+
+
+@code {
+    private bool _isLoadingProfiles = true;
+    private IList<Physician> _physicians = new List<Physician>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        await LoadAvailablePhysiciansAsync();
+    }
+
+    private async Task LoadAvailablePhysiciansAsync()
+    {
+        var response = await PhysicianAPI.GetAllPhysiciansAsync();
+        var serializationOptions = new JsonSerializerOptions()
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            };
+        var responseBodyAsString = await response.Content.ReadAsStringAsync();
+        if (response.IsSuccessStatusCode)
+        {
+            _physicians = JsonSerializer
+                            .Deserialize<IList<Physician>>(responseBodyAsString,
+                                                           serializationOptions);
+            _isLoadingProfiles = false;
+        }
+
+        else
+        {
+            var operationError = JsonSerializer.Deserialize<OperationError>(responseBodyAsString,
+                                                                            serializationOptions);
+        }
+    }
+
+    private void DisplayPhysicianSchedule(Physician physician)
+    {
+         PageParameterService.PassObject(physician);
+         NavManager.NavigateTo("/physicianschedule");
+
+    }
+}

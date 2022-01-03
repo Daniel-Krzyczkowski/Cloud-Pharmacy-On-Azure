@@ -1,0 +1,133 @@
+﻿@page "/physicianschedule"
+@using CloudPharmacy.Patient.WebApp.Application.Model
+@using System.Text.Json
+@inject CloudPharmacy.Patient.WebApp.Utils.PageParameterService<Physician> PageParameterService
+@inject CloudPharmacy.Patient.WebApp.Infrastructure.API.IPhysicianAPI PhysicianAPI
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+
+<PageTitle>Physician schedule</PageTitle>
+<RadzenDialog />
+<RadzenNotification />
+<AuthorizeView>
+    <Authorized>
+
+        <div class="container">
+            <h2 class="p-3 text-center">Available time slots:</h2>
+            <div class="col-md-12 d-flex align-items-end justify-content-center">
+                <div class="col-md-4 p-3">
+                    <RadzenCard Visible=@_isLoadingSlots>
+                        <RadzenProgressBar Visible=@_isLoadingSlots Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+                    </RadzenCard>
+                </div>
+            </div>
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var slot in freeSlots)
+                    {
+                        <tr>
+                            <td>@slot.SlotDateAndTime.ToString("yyyy-MM-dd")</td>
+                            <td>@slot.SlotDateAndTime.ToString("HH:mm")</td>
+                            <td>
+                                <button class="btn btn-primary" @onclick="@(async () => await ShowInlineDialog())">
+                                    Schedule visit
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+    </Authorized>
+    <NotAuthorized>
+        <p>
+            <b>Please authenticate first.</b>
+        </p>
+    </NotAuthorized>
+</AuthorizeView>
+
+
+@code {
+    private Physician _physician;
+    private IList<PhysicianScheduleSlot> freeSlots = new List<PhysicianScheduleSlot>();
+    private bool _isLoadingSlots = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _physician = PageParameterService.GetObjectParameter();
+        await base.OnInitializedAsync();
+        await GetAllFreeSlotsAsync();
+    }
+
+    private async Task GetAllFreeSlotsAsync()
+    {
+        var physicianId = _physician.Id;
+        var response = await PhysicianAPI.GetFreeSlotsForPhysicianAsync(physicianId);
+        _isLoadingSlots = false;
+        var responseBodyAsString = await response.Content.ReadAsStringAsync();
+        var serializationOptions = new JsonSerializerOptions()
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            };
+        if (response.IsSuccessStatusCode)
+        {
+
+            freeSlots = JsonSerializer
+                              .Deserialize<IList<PhysicianScheduleSlot>>(responseBodyAsString,
+                                                           serializationOptions);
+        }
+
+        else
+        {
+            var errorMessage = JsonSerializer.Deserialize<OperationError>(responseBodyAsString,
+                                                           serializationOptions);
+            var error = new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "An error has occurred",
+                    Detail = errorMessage.Details,
+                    Duration = 4000
+                };
+            NotificationService.Notify(error);
+        }
+    }
+
+    private async Task ShowInlineDialog()
+    {
+        var result = await DialogService.OpenAsync("Confirm visit", ds =>
+    @<div>
+        <p Style="margin-bottom: 1rem">Do you want to confirm visit?</p>
+        <div class="row">
+            <div class="col-md-12">
+                <RadzenButton Text="Yes" Click="() => ShowVisitConfirmation(ds)" Style="margin-bottom: 10px; width: 150px" />
+                <RadzenButton Text="Cancel" Click="() => ds.Close(false)" ButtonStyle="ButtonStyle.Secondary" Style="margin-bottom: 10px; width: 150px" />
+                <p>
+                    Visit with: @_physician.FirstNameAndLastName
+                </p>
+            </div>
+        </div>
+    </div>
+    );
+    }
+
+    private async Task ShowVisitConfirmation(DialogService ds)
+    {
+        ds.Close(true);
+        var error = new NotificationMessage
+            {
+                Severity = NotificationSeverity.Success,
+                Summary = "Visit successfully scheduled",
+                Detail = "",
+                Duration = 4000
+            };
+        NotificationService.Notify(error);
+    }
+}

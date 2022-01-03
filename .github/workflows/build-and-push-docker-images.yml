@@ -1,0 +1,34 @@
+name: Build and push Docker images
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/backend-apis/**'
+      - '!src/backend-apis/CloudPharmacy.LiveNotifications.FuncApp/**'
+
+  workflow_dispatch:
+
+permissions:
+      id-token: write
+      contents: read
+jobs: 
+  build-and-push-docker-images-to-acr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Code checkout'
+        uses: actions/checkout@v2
+        
+      - name: 'Az CLI login'
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  
+      - name: 'Build and push Docker images to ACR'
+        run: |
+          az acr build --image cloudpharmacystoreapi/pharmacy-store-api:latest --registry acrcloudpharmacydev --file src/backend-apis/CloudPharmacy.PharmacyStore.API/Dockerfile src
+          az acr build --image cloudpharmacypatientapi/patient-api:latest --registry acrcloudpharmacydev --file src/backend-apis/CloudPharmacy.Patient.API/Dockerfile src
+          az acr build --image cloudpharmacyphysicianapi/physician-api:latest --registry acrcloudpharmacydev --file src/backend-apis/CloudPharmacy.Physician.API/Dockerfile src
+          az acr build --image cloudpharmacyverifiablecredentialsapi/verifiable-credentials-api:latest --registry acrcloudpharmacydev --file src/backend-apis/CloudPharmacy.VerifiableCredentials.API/Dockerfile src

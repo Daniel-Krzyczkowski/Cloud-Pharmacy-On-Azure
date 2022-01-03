@@ -1,0 +1,11 @@
+﻿@using System.Security.Claims
+
+<AuthorizeView>
+    <Authorized>
+         Hello, @context.User.Claims.First(c => c.Type == ClaimTypes.GivenName).Value!
+        <a href="MicrosoftIdentity/Account/SignOut">Log out</a>
+    </Authorized>
+    <NotAuthorized>
+        <a href="MicrosoftIdentity/Account/SignIn">Log in</a>
+    </NotAuthorized>
+</AuthorizeView>

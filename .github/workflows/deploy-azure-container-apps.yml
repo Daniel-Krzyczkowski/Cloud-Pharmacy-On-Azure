@@ -1,0 +1,58 @@
+name: Create Azure Container Apps
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - src/azure-infrastructure/container-app-main.bicep
+
+  workflow_dispatch:
+
+permissions:
+      id-token: write
+      contents: read
+
+env:
+  DEV_RESOURCE_GROUP_NAME: rg-cloud-pharamcy-dev
+
+jobs:
+  deploy-azure-container-apps-for-dev-environment:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: 'Code checkout'
+        uses: actions/checkout@v2
+        
+      - name: 'Az CLI login'
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+        # Deploy Bicep file
+      - name: Deploy Cloud Pharmacy APIs container apps
+        uses: azure/arm-deploy@v1
+        with:
+          subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          resourceGroupName: ${{ env.DEV_RESOURCE_GROUP_NAME }}
+          template: ./src/azure-infrastructure/container-apps-main.bicep
+          parameters: patientApiContainerImage=acrcloudpharmacydev.azurecr.io/cloudpharmacypatientapi/patient-api:latest
+                      physicianApiContainerImage=acrcloudpharmacydev.azurecr.io/cloudpharmacyphysicianapi/physician-api:latest
+                      pharmacyStoreApiContainerImage=acrcloudpharmacydev.azurecr.io/cloudpharmacystoreapi/pharmacy-store-api:latest
+                      verifiableCredentialsApiContainerImage=acrcloudpharmacydev.azurecr.io/cloudpharmacyverifiablecredentialsapi/verifiable-credentials-api:latest
+                      revisionSuffix=rev-10
+                      containerPort=80
+                      containerRegistryName=acrcloudpharmacydev.azurecr.io
+                      containerRegistryUsername=${{ secrets.AZURE_ACR_USERNAME_DEV }}
+                      containerRegistryPassword=${{ secrets.AZURE_ACR_PASSWORD_DEV }}
+                      appInsightsKey=${{ secrets.APPLICATION_INSIGHTS_KEY_DEV }}
+                      storageAccountKey=${{ secrets.STORAGE_ACCOUNT_KEY_DEV }}
+                      storageAccountConnectionString=${{ secrets.STORAGE_ACCOUNT_CONN_STRING_DEV }}
+                      cosmosDbConnectionString=${{ secrets.COSMOS_DB_CONN_STRING_DEV }}
+                      patientApiClientSecret=${{ secrets.PATIENT_API_CLIENT_SECRET_DEV }}
+                      pharmacyStoreApiClientSecret=${{ secrets.PHARMACY_STORE_API_CLIENT_SECRET_DEV }}
+                      verifiableCredentialsApiClientSecret=${{ secrets.VERIFIABLE_CREDENTIALS_API_CLIENT_SECRET_DEV }}
+                      patientVerifiableCredentialDecentralizedIdentifier=${{ secrets.PATIENT_VC_DECENTRALIZED_IDENTIFIER }}
+          failOnStdErr: false

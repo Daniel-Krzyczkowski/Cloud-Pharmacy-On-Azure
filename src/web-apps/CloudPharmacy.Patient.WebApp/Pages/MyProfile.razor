@@ -1,0 +1,292 @@
+﻿@page "/myprofile"
+@using CloudPharmacy.Patient.WebApp.Application.Model
+@using Microsoft.Identity.Web
+@using System.Text.Json
+@inject NotificationService NotificationService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject CloudPharmacy.Patient.WebApp.Infrastructure.Notifications.VerifiableCredentialsNotificationService VerifiableCredentialsNotificationService
+@inject CloudPharmacy.Patient.WebApp.Infrastructure.API.IPatientAPI PatientAPI
+@inject NavigationManager NavManager
+@implements IAsyncDisposable
+
+<PageTitle>My profile</PageTitle>
+<RadzenNotification />
+<AuthorizeView Context="Auth">
+    <Authorized>
+        <h1>My profile</h1>
+        <div class="col-md-12 d-flex align-items-end justify-content-center">
+            <div class="col-md-4 p-3">
+                <RadzenCard Visible=@_isLoadingProfile>
+                    <RadzenProgressBar Visible=@_isLoadingProfile Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+                </RadzenCard>
+            </div>
+        </div>
+
+        <RadzenFieldset Text="Profile details" Visible=@_isProfileLoaded>
+            <div class="row">
+                <div class="align-items-center d-flex col-md-3">
+                    <RadzenLabel Text="Name:" />
+                </div>
+                <div class="col-md-9">
+                    <RadzenTextBox style="width: 100%;" Name="FirstName" @bind-Value="@_patient.FirstNameAndLastName" Disabled="true" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="align-items-center d-flex col-md-3">
+                    <RadzenLabel Text="National healthcare ID:" />
+                </div>
+                <div class="col-md-9">
+                    <RadzenTextBox style="width: 100%;" Name="NationalHealthCareId" @bind-Value="@_patient.NationalHealthcareId" />
+                </div>
+            </div>
+            <p>
+                <div class="row justify-content-center">
+                    <div class="col-md-12 d-flex align-items-end justify-content-center" style="margin-top: 16px;">
+                        <RadzenButton style="margin: 0 1rem 1rem 0; width: 200px" Icon="save" Text="Save" Click=@(async () => await SaveProfileAsync()) ButtonStyle="ButtonStyle.Info" />
+                    </div>
+                </div>
+            </p>
+        </RadzenFieldset>
+
+        <RadzenFieldset Text="Get your Verifiable Credential">
+            <div class="row">
+                <div class="col-md-12 d-flex align-items-end justify-content-center">
+                    <RadzenLabel Text="Scan the code with Microsoft Authenticator App:" />
+                </div>
+            </div>
+            <br />
+            <div class="row">
+                <div class="col-md-12 d-flex align-items-end justify-content-center">
+                    <RadzenButton style="margin: 0 1rem 1rem 0; width: 200px" Icon="assignment_returned" Text="Generate code" Click=@(async () => await GetVerifiableCredentialAsync()) ButtonStyle="ButtonStyle.Info" />
+                </div>
+            </div>
+            <br />
+            <div class="row">
+                <div class="col-md-12 d-flex align-items-end justify-content-center">
+                    <div class="col-md-4 p-3">
+                        <RadzenCard Visible=@_isLoadingVerifiableCredentialQrCode>
+                            <RadzenProgressBar Visible=@_isLoadingVerifiableCredentialQrCode Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+                        </RadzenCard>
+                    </div>
+                </div>
+                <div class="col-md-12 d-flex align-items-end justify-content-center">
+                    <img src="@_patientCredentialIssuanceResponse?.QrCode" width="200" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-12 d-flex align-items-end justify-content-center">
+                    <RadzenLabel Visible=@_isPinLabelVisible Text="Pin:" />
+                    &nbsp
+                    <RadzenLabel Visible=@_isPinLabelVisible Text=@_patientCredentialIssuanceResponse?.Pin />
+                </div>
+            </div>
+        </RadzenFieldset>
+
+
+    </Authorized>
+    <NotAuthorized>
+        <p>
+            <b>Please authenticate first.</b>
+        </p>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private bool _isProfileLoaded;
+    private bool _isLoadingProfile = true;
+    private PatientProfile _patient = new();
+    private PatientProfileUpdate _patientProfileUpdate = new();
+
+    private PatientCredentialIssuanceResponse _patientCredentialIssuanceResponse;
+    private bool _isPinLabelVisible = false;
+    private bool _isLoadingVerifiableCredentialQrCode;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        await SubscribeToLiveEventsAsync();
+        await DisplayProfileAsync();
+    }
+
+    private async Task DisplayProfileAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            var response = await PatientAPI.GetPatientProfileAsync();
+            var responseBodyAsString = await response.Content.ReadAsStringAsync();
+            var serializationOptions = new JsonSerializerOptions()
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                };
+            if (response.IsSuccessStatusCode)
+            {
+
+                _patient = JsonSerializer
+                                       .Deserialize<PatientProfile>(responseBodyAsString,
+                                                               serializationOptions);
+            }
+
+            _isProfileLoaded = true;
+            _isLoadingProfile = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveProfileAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            _patientProfileUpdate.NationalHealthcareId = _patient.NationalHealthcareId;
+            if (_patientProfileUpdate.NationalHealthcareId == null)
+            {
+                var confirmation = new NotificationMessage
+                    {
+                        Severity = NotificationSeverity.Warning,
+                        Summary = "Please provide national healthcare ID",
+                        Detail = "",
+                        Duration = 4000
+                    };
+                NotificationService.Notify(confirmation);
+            }
+            else
+            {
+                _isProfileLoaded = false;
+                _isLoadingProfile = true;
+                var response = await PatientAPI.UpdatePatientProfileAsync(_patientProfileUpdate);
+                _isProfileLoaded = true;
+                _isLoadingProfile = false;
+                var responseBodyAsString = await response.Content.ReadAsStringAsync();
+                var serializationOptions = new JsonSerializerOptions()
+                    {
+                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                    };
+
+                if (response.IsSuccessStatusCode)
+                {
+
+                    _patient = JsonSerializer
+                                           .Deserialize<PatientProfile>(responseBodyAsString,
+                                                                   serializationOptions);
+                    StateHasChanged();
+                    var confirmation = new NotificationMessage
+                        {
+                            Severity = NotificationSeverity.Success,
+                            Summary = "Profile successfully saved",
+                            Detail = "",
+                            Duration = 4000
+                        };
+                    NotificationService.Notify(confirmation);
+                }
+
+                else
+                {
+                    var errorMessage = JsonSerializer.Deserialize<OperationError>(responseBodyAsString,
+                                                                   serializationOptions);
+                    var error = new NotificationMessage
+                        {
+                            Severity = NotificationSeverity.Error,
+                            Summary = "An error has occurred",
+                            Detail = errorMessage.Details,
+                            Duration = 4000
+                        };
+                    NotificationService.Notify(error);
+                }
+            }
+        }
+    }
+
+    private async Task SubscribeToLiveEventsAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            var userId = user.FindFirst(ClaimConstants.NameIdentifierId).Value;
+            await VerifiableCredentialsNotificationService.Initialize(userId);
+            await VerifiableCredentialsNotificationService.OpenConnectionAsync();
+            VerifiableCredentialsNotificationService.SubscribeHubMethod("vc-issuance-status-update");
+            VerifiableCredentialsNotificationService.OnMessageReceived += LiveNotificationReceived;
+        }
+    }
+
+    private async Task UnSubscribeToLiveEventsAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            if (VerifiableCredentialsNotificationService.IsConnectionOpened)
+            {
+                await VerifiableCredentialsNotificationService.CloseConnectionAsync();
+            }
+        }
+    }
+
+    private async Task GetVerifiableCredentialAsync()
+    {
+        _isLoadingVerifiableCredentialQrCode = true;
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            var response = await PatientAPI.IssuePatientVerifiableCredentialAsync();
+            var serializationOptions = new JsonSerializerOptions()
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                };
+            var responseBodyAsString = await response.Content.ReadAsStringAsync();
+            if (response.IsSuccessStatusCode)
+            {
+                _patientCredentialIssuanceResponse = JsonSerializer
+                                                       .Deserialize<PatientCredentialIssuanceResponse>(responseBodyAsString,
+                                                                                                       serializationOptions);
+                _isPinLabelVisible = true;
+                _isLoadingVerifiableCredentialQrCode = false;
+            }
+
+            else
+            {
+                var operationError = JsonSerializer.Deserialize<OperationError>(responseBodyAsString,
+                                                                                serializationOptions);
+            }
+        }
+    }
+
+    private void LiveNotificationReceived(string message)
+    {
+        var serializationOptions = new JsonSerializerOptions()
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            };
+        var issuanceStatusResponse = JsonSerializer
+                                              .Deserialize<IssuanceStatusResponse>(message,
+                                                                                   serializationOptions);
+
+        if (issuanceStatusResponse.Code == IssuanceStatus.VerifiableCredentialSuccessfullyIssued)
+        {
+            var confirmation = new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Patient's verifiable credential issued successfully",
+                    Detail = "",
+                    Duration = 4000
+                };
+            NotificationService.Notify(confirmation);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        VerifiableCredentialsNotificationService.OnMessageReceived -= LiveNotificationReceived;
+        await UnSubscribeToLiveEventsAsync();
+    }
+}

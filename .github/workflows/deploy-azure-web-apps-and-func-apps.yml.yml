@@ -1,0 +1,40 @@
+name: Create Azure Web Apps with App Services
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - src/azure-infrastructure/func-apps-web-apps-main.bicep
+
+  workflow_dispatch:
+
+permissions:
+      id-token: write
+      contents: read
+
+env:
+  DEV_RESOURCE_GROUP_NAME: rg-cloud-pharamcy-dev
+
+jobs:
+  deploy-azure-web-apps-and-func-apps-for-dev-environment:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: 'Code checkout'
+        uses: actions/checkout@v2
+        
+      - name: 'Az CLI login'
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        # Deploy Bicep file
+      - name: Create main Azure resources
+        uses: azure/arm-deploy@v1
+        with:
+          subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          resourceGroupName: ${{ env.DEV_RESOURCE_GROUP_NAME }}
+          template: ./src/azure-infrastructure/func-apps-web-apps-main.bicep
+          failOnStdErr: false

@@ -1,0 +1,30 @@
+{
+    "default": {
+      "locale": "en-US",
+      "card": {
+        "title": "Patient",
+        "issuedBy": "Cloud Pharmacy",
+        "backgroundColor": "#FFFFFF",
+        "textColor": "#4F8ED8",
+        "logo": {
+          "uri": "https://strvcdev.blob.core.windows.net/public-vc-container/cloud-pharmacy-vc-logo.png",
+          "description": "Cloud Pharmacy Patient"
+        },
+        "description": "Use your verified credential to prove that you are eligible to buy medicaments."
+      },
+      "consent": {
+        "title": "Confirm patient profile",
+        "instructions": "With patient credential you can buy medicaments."
+      },
+			"claims": {
+				"vc.credentialSubject.patientId": {
+					"type": "String",
+					"label": "Patient identifier"
+				},
+				"vc.credentialSubject.patientName": {
+					"type": "String",
+					"label": "Patient name"
+				}
+      }
+    }
+  }
