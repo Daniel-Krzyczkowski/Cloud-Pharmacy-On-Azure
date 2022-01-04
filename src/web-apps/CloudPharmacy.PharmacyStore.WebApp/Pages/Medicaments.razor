@@ -4,6 +4,7 @@
 @inject NavigationManager NavManager
 @inject DialogService DialogService
 @inject NotificationService NotificationService
+@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject CloudPharmacy.PharmacyStore.WebApp.Infrastructure.API.IPharmacyStoreAPI PharmacyStoreAPI
 
 <RadzenDialog />
@@ -52,35 +53,41 @@
     }
     private async Task LoadAllMedicamentsAsync()
     {
-        var response = await PharmacyStoreAPI.GetMedicamentsAsync();
-        var responseBodyAsString = await response.Content.ReadAsStringAsync();
-        _isLoadingMedicaments = false;
-        var serializationOptions = new JsonSerializerOptions()
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-            };
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
 
-        if (response.IsSuccessStatusCode)
+        if (user.Identity.IsAuthenticated)
         {
-
-            _medicaments = JsonSerializer
-                                   .Deserialize<IList<Medicament>>(responseBodyAsString,
-                                                           serializationOptions);
-            StateHasChanged();
-        }
-
-        else
-        {
-            var errorMessage = JsonSerializer.Deserialize<OperationError>(responseBodyAsString,
-                                                           serializationOptions);
-            var error = new NotificationMessage
+            var response = await PharmacyStoreAPI.GetMedicamentsAsync();
+            var responseBodyAsString = await response.Content.ReadAsStringAsync();
+            _isLoadingMedicaments = false;
+            var serializationOptions = new JsonSerializerOptions()
                 {
-                    Severity = NotificationSeverity.Error,
-                    Summary = "An error has occurred",
-                    Detail = errorMessage.Details,
-                    Duration = 4000
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
                 };
-            NotificationService.Notify(error);
+
+            if (response.IsSuccessStatusCode)
+            {
+
+                _medicaments = JsonSerializer
+                                       .Deserialize<IList<Medicament>>(responseBodyAsString,
+                                                               serializationOptions);
+                StateHasChanged();
+            }
+
+            else
+            {
+                var errorMessage = JsonSerializer.Deserialize<OperationError>(responseBodyAsString,
+                                                               serializationOptions);
+                var error = new NotificationMessage
+                    {
+                        Severity = NotificationSeverity.Error,
+                        Summary = "An error has occurred",
+                        Detail = errorMessage.Details,
+                        Duration = 4000
+                    };
+                NotificationService.Notify(error);
+            }
         }
     }
 
