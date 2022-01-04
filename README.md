@@ -7,7 +7,7 @@ Cloud Pharmacy is a fake medical company which used Microsoft Azure cloud servic
 
 **GitHub Actions workflows can be found under [workflows](https://github.com/Daniel-Krzyczkowski/Cloud-Pharmacy-On-Azure/tree/main/.github/workflows) folder - they are disabled in this repo. I have another private repository which I use for testing and deployments**
 
-** There is always space for improvements - feel free to create PR if you see that something can be done better!**
+**There is always space for improvements - feel free to create PR if you see that something can be done better!**
 
 # Solution architecture
 
