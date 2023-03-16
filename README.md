@@ -1,7 +1,7 @@
 
 ![cloud-pharmacy-main-logo.PNG](images/cloud-pharmacy-main-logo.PNG)
 
-Cloud Pharmacy is a fake medical company which used Microsoft Azure cloud services to implement the system for patients, physicians, and medicaments store.
+Cloud Pharmacy is a fake medical company which uses Microsoft Azure cloud services to implement the system for patients, physicians, and medicaments store.
 
 **Implementation details and architecture concepts explanation will be published on my YouTube channel in form of video series, subscribe here: [youtube.com/techmindfactory](https://www.youtube.com/techmindfactory)**
 
